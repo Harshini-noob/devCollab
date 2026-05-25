@@ -1,3 +1,4 @@
+import { io } from "../server.js";
 import Task from "../models/task.model.js";
 import Project from "../models/project.model.js";
 
@@ -32,6 +33,8 @@ export const createTask = async (req, res) => {
       createdBy: req.user._id,
     });
 
+    io.to(projectId).emit("taskCreated", task);
+    
     res.status(201).json({
       message: "Task created successfully",
       task,
@@ -82,6 +85,8 @@ export const updateTaskStatus = async (req, res) => {
 
     await task.save();
 
+    io.to(task.project.toString()).emit("taskUpdated", task);
+
     res.status(200).json({
       message: "Task status updated",
       task,
@@ -113,6 +118,8 @@ export const addComment = async (req, res) => {
     });
 
     await task.save();
+
+    io.to(task.project.toString()).emit("commentAdded", task);
 
     res.status(200).json({
       message: "Comment added",
