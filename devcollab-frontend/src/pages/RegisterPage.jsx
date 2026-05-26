@@ -1,88 +1,89 @@
 import { useState } from "react";
-
-import { useNavigate } from "react-router-dom";
-
+import { useNavigate, Link } from "react-router-dom";
 import { registerUser } from "../services/auth.service";
-
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
 
 function RegisterPage() {
   const navigate = useNavigate();
-
   const { setToken, setUser } = useAuth();
+  const toast = useToast();
+  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [loading, setLoading] = useState(false);
 
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    password: "",
-  });
-
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
+  const handleChange = (e) =>
+    setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
+    setLoading(true);
     try {
-      const data = await registerUser(formData);
-
+      const data = await registerUser(form);
       setToken(data.token);
-
       setUser(data.user);
-
+      toast("Account created!", "success");
       navigate("/");
-    } catch (error) {
-        console.log(error.response?.data);
-
-        alert(error.response?.data?.message || "Registration failed");
+    } catch (err) {
+      toast(err.response?.data?.message || "Registration failed", "error");
     }
+    setLoading(false);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900">
-      <form
-        onSubmit={handleSubmit}
-        className="bg-slate-800 p-8 rounded-xl w-[400px] flex flex-col gap-4"
-      >
-        <h1 className="text-3xl font-bold text-center">
-          Register
-        </h1>
+    <div className="min-h-screen bg-[#080b14] flex items-center justify-center p-4">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-3xl" />
+      </div>
 
-        <input
-          type="text"
-          name="name"
-          placeholder="Name"
-          className="p-3 rounded bg-slate-700"
-          onChange={handleChange}
-        />
+      <div className="w-full max-w-sm animate-fadein relative">
+        <div className="text-center mb-8">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center text-white font-bold text-lg mx-auto mb-4">
+            DC
+          </div>
+          <h1 className="text-2xl font-bold text-white tracking-tight">Create your account</h1>
+          <p className="text-slate-400 text-sm mt-1">Start collaborating today</p>
+        </div>
 
-        <input
-          type="email"
-          name="email"
-          placeholder="Email"
-          className="p-3 rounded bg-slate-700"
-          onChange={handleChange}
-        />
-
-        <input
-          type="password"
-          name="password"
-          placeholder="Password"
-          className="p-3 rounded bg-slate-700"
-          onChange={handleChange}
-        />
-
-        <button
-          type="submit"
-          className="bg-blue-600 hover:bg-blue-700 p-3 rounded font-semibold"
+        <form
+          onSubmit={handleSubmit}
+          className="bg-[#0d1117] border border-[#1e2535] rounded-2xl p-6 flex flex-col gap-4"
         >
-          Register
-        </button>
-      </form>
+          {[
+            { name: "name", label: "Full Name", type: "text", placeholder: "John Doe" },
+            { name: "email", label: "Email", type: "email", placeholder: "you@company.com" },
+            { name: "password", label: "Password", type: "password", placeholder: "••••••••" },
+          ].map((field) => (
+            <div key={field.name} className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">{field.label}</label>
+              <input
+                type={field.type}
+                name={field.name}
+                placeholder={field.placeholder}
+                value={form[field.name]}
+                onChange={handleChange}
+                required
+                className="w-full px-3 py-2.5 bg-[#1a2035] border border-[#2a3550] rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/60 transition-all"
+              />
+            </div>
+          ))}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium rounded-xl text-sm transition-all flex items-center justify-center gap-2 mt-1"
+          >
+            {loading && <span className="spinner" />}
+            {loading ? "Creating account…" : "Create account"}
+          </button>
+        </form>
+
+        <p className="text-center text-sm text-slate-500 mt-5">
+          Already have an account?{" "}
+          <Link to="/login" className="text-indigo-400 hover:text-indigo-300 font-medium">
+            Sign in
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }

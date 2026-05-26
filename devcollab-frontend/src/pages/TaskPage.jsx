@@ -1,0 +1,396 @@
+import { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import {
+  getTasks,
+  createTask,
+  updateTaskStatus,
+  addComment,
+  deleteTask,
+} from "../services/task.service";
+import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
+import Modal from "../components/Modal";
+import Button from "../components/Button";
+import { StatusBadge, PriorityBadge } from "../components/Badge";
+import EmptyState from "../components/EmptyState";
+
+const COLUMNS = [
+  { id: "todo",        label: "To Do",       color: "text-slate-400",   dot: "bg-slate-500" },
+  { id: "in-progress", label: "In Progress", color: "text-blue-400",    dot: "bg-blue-500" },
+  { id: "done",        label: "Done",        color: "text-emerald-400", dot: "bg-emerald-500" },
+  { id: "blocked",     label: "Blocked",     color: "text-red-400",     dot: "bg-red-500" },
+];
+
+const PRIORITIES = ["low", "medium", "high"];
+
+function TaskPage() {
+  const { workspaceId, projectId } = useParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const toast = useToast();
+
+  const [tasks, setTasks]               = useState([]);
+  const [loading, setLoading]           = useState(true);
+  const [createModal, setCreateModal]   = useState(false);
+  const [detailTask, setDetailTask]     = useState(null);
+  const [submitting, setSubmitting]     = useState(false);
+  const [comment, setComment]           = useState("");
+  const [addingComment, setAddingComment] = useState(false);
+
+  const [form, setForm] = useState({
+    title: "", description: "", priority: "medium",
+    dueDate: "", labels: "", assignee: "",
+  });
+
+  const fetchTasks = async () => {
+    try {
+      const data = await getTasks(projectId);
+      setTasks(data.tasks || []);
+    } catch {
+      toast("Failed to load tasks", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchTasks(); }, [projectId]);
+
+  // Sync detailTask when tasks update
+  useEffect(() => {
+    if (detailTask) {
+      const updated = tasks.find((t) => t._id === detailTask._id);
+      if (updated) setDetailTask(updated);
+    }
+  }, [tasks]);
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    if (!form.title.trim()) return;
+    setSubmitting(true);
+    try {
+      const body = {
+        ...form,
+        projectId,
+        labels: form.labels ? form.labels.split(",").map((l) => l.trim()).filter(Boolean) : [],
+      };
+      await createTask(body);
+      toast("Task created!", "success");
+      setCreateModal(false);
+      setForm({ title: "", description: "", priority: "medium", dueDate: "", labels: "", assignee: "" });
+      fetchTasks();
+    } catch (err) {
+      toast(err.response?.data?.message || "Failed", "error");
+    }
+    setSubmitting(false);
+  };
+
+  const handleStatusChange = async (taskId, status) => {
+    try {
+      await updateTaskStatus(taskId, status);
+      setTasks((prev) => prev.map((t) => t._id === taskId ? { ...t, status } : t));
+    } catch (err) {
+      toast(err.response?.data?.message || "Failed to update status", "error");
+    }
+  };
+
+  const handleDelete = async (taskId) => {
+    if (!confirm("Delete this task?")) return;
+    try {
+      await deleteTask(taskId);
+      toast("Task deleted", "success");
+      setDetailTask(null);
+      fetchTasks();
+    } catch (err) {
+      toast(err.response?.data?.message || "Failed to delete", "error");
+    }
+  };
+
+  const handleAddComment = async (e) => {
+    e.preventDefault();
+    if (!comment.trim()) return;
+    setAddingComment(true);
+    try {
+      const data = await addComment(detailTask._id, comment);
+      setTasks((prev) => prev.map((t) => t._id === detailTask._id ? data.task : t));
+      setDetailTask(data.task);
+      setComment("");
+      toast("Comment added", "success");
+    } catch {
+      toast("Failed to add comment", "error");
+    }
+    setAddingComment(false);
+  };
+
+  const byStatus = (status) => tasks.filter((t) => (t.status || "todo") === status);
+
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="h-6 w-32 bg-[#1a2035] rounded-lg animate-pulse mb-8" />
+        <div className="grid grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-48 bg-[#0d1117] border border-[#1e2535] rounded-2xl animate-pulse" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-8">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <button
+            onClick={() => navigate(`/workspace/${workspaceId}`)}
+            className="text-slate-500 hover:text-slate-300 text-sm mb-2 flex items-center gap-1 transition-colors"
+          >
+            ← Back
+          </button>
+          <h1 className="text-2xl font-bold text-white tracking-tight">Tasks</h1>
+          <p className="text-slate-400 text-sm mt-1">{tasks.length} task{tasks.length !== 1 ? "s" : ""}</p>
+        </div>
+        <Button onClick={() => setCreateModal(true)}>+ New Task</Button>
+      </div>
+
+      {/* Kanban board */}
+      <div className="grid grid-cols-4 gap-4">
+        {COLUMNS.map((col) => {
+          const colTasks = byStatus(col.id);
+          return (
+            <div key={col.id} className="flex flex-col gap-3">
+              {/* Column header */}
+              <div className="flex items-center gap-2 px-1">
+                <span className={`w-2 h-2 rounded-full ${col.dot}`} />
+                <span className={`text-xs font-semibold uppercase tracking-wider ${col.color}`}>
+                  {col.label}
+                </span>
+                <span className="ml-auto text-xs text-slate-600 bg-[#1a2035] px-2 py-0.5 rounded-full">
+                  {colTasks.length}
+                </span>
+              </div>
+
+              {/* Cards */}
+              <div className="flex flex-col gap-2 min-h-[120px]">
+                {colTasks.map((task) => (
+                  <div
+                    key={task._id}
+                    onClick={() => setDetailTask(task)}
+                    className="bg-[#0d1117] border border-[#1e2535] hover:border-indigo-500/30 rounded-xl p-3.5 cursor-pointer transition-all hover:shadow-md animate-fadein"
+                  >
+                    <p className="text-sm font-medium text-white mb-2 leading-snug">{task.title}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <PriorityBadge priority={task.priority} />
+                      {task.dueDate && (
+                        <span className="text-xs text-slate-500 font-mono">
+                          {new Date(task.dueDate).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                    {task.labels?.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {task.labels.map((l, i) => (
+                          <span key={i} className="text-xs bg-[#1a2035] text-slate-400 px-2 py-0.5 rounded-md border border-[#2a3550]">
+                            {l}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {task.comments?.length > 0 && (
+                      <p className="text-xs text-slate-600 mt-2">
+                        {task.comments.length} comment{task.comments.length !== 1 ? "s" : ""}
+                      </p>
+                    )}
+                  </div>
+                ))}
+
+                {colTasks.length === 0 && (
+                  <div className="border border-dashed border-[#1e2535] rounded-xl h-16 flex items-center justify-center">
+                    <span className="text-xs text-slate-700">Empty</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Create Task Modal */}
+      {createModal && (
+        <Modal title="New Task" onClose={() => setCreateModal(false)} size="lg">
+          <form onSubmit={handleCreate} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Title *</label>
+              <input
+                autoFocus
+                placeholder="Task title"
+                value={form.title}
+                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                required
+                className="w-full px-3 py-2.5 bg-[#1a2035] border border-[#2a3550] rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/60 transition-all"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Description</label>
+              <textarea
+                rows={3}
+                placeholder="Task details…"
+                value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                className="w-full px-3 py-2.5 bg-[#1a2035] border border-[#2a3550] rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/60 transition-all resize-none"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Priority</label>
+                <select
+                  value={form.priority}
+                  onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
+                  className="w-full px-3 py-2.5 bg-[#1a2035] border border-[#2a3550] rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500/60 transition-all appearance-none"
+                >
+                  {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Due Date</label>
+                <input
+                  type="date"
+                  value={form.dueDate}
+                  onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
+                  className="w-full px-3 py-2.5 bg-[#1a2035] border border-[#2a3550] rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500/60 transition-all"
+                />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Assignee</label>
+              <input
+                placeholder="Email or username"
+                value={form.assignee}
+                onChange={(e) => setForm((f) => ({ ...f, assignee: e.target.value }))}
+                className="w-full px-3 py-2.5 bg-[#1a2035] border border-[#2a3550] rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/60 transition-all"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Labels (comma separated)</label>
+              <input
+                placeholder="bug, frontend, urgent"
+                value={form.labels}
+                onChange={(e) => setForm((f) => ({ ...f, labels: e.target.value }))}
+                className="w-full px-3 py-2.5 bg-[#1a2035] border border-[#2a3550] rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/60 transition-all"
+              />
+            </div>
+            <div className="flex gap-3 justify-end pt-1">
+              <Button variant="ghost" type="button" onClick={() => setCreateModal(false)}>Cancel</Button>
+              <Button type="submit" loading={submitting}>Create Task</Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Task Detail Modal */}
+      {detailTask && (
+        <Modal title={detailTask.title} onClose={() => setDetailTask(null)} size="lg">
+          <div className="flex flex-col gap-5">
+            {/* Badges */}
+            <div className="flex flex-wrap gap-2">
+              <StatusBadge status={detailTask.status || "todo"} />
+              <PriorityBadge priority={detailTask.priority} />
+              {detailTask.dueDate && (
+                <span className="text-xs text-slate-400 border border-[#2a3550] px-2 py-0.5 rounded-md font-mono">
+                  Due {new Date(detailTask.dueDate).toLocaleDateString()}
+                </span>
+              )}
+            </div>
+
+            {/* Description */}
+            {detailTask.description && (
+              <p className="text-sm text-slate-400 leading-relaxed">{detailTask.description}</p>
+            )}
+
+            {/* Assignee */}
+            {detailTask.assignee && (
+              <p className="text-sm text-slate-500">
+                Assigned to:{" "}
+                <span className="text-slate-300">
+                  {typeof detailTask.assignee === "object"
+                    ? detailTask.assignee.name
+                    : detailTask.assignee}
+                </span>
+              </p>
+            )}
+
+            {/* Labels */}
+            {detailTask.labels?.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {detailTask.labels.map((l, i) => (
+                  <span key={i} className="text-xs bg-[#1a2035] text-slate-400 px-2.5 py-1 rounded-lg border border-[#2a3550]">
+                    {l}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Change Status */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Change Status</label>
+              <select
+                value={detailTask.status || "todo"}
+                onChange={(e) => handleStatusChange(detailTask._id, e.target.value)}
+                className="w-full px-3 py-2.5 bg-[#1a2035] border border-[#2a3550] rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500/60 transition-all appearance-none"
+              >
+                {COLUMNS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+              </select>
+            </div>
+
+            {/* Delete */}
+            <Button
+              variant="danger"
+              size="sm"
+              className="w-fit"
+              onClick={() => handleDelete(detailTask._id)}
+            >
+              Delete Task
+            </Button>
+
+            {/* Comments */}
+            <div className="border-t border-[#1e2535] pt-5">
+              <h4 className="text-sm font-semibold text-white mb-4">
+                Comments ({detailTask.comments?.length || 0})
+              </h4>
+
+              <div className="space-y-3 mb-4 max-h-48 overflow-y-auto">
+                {detailTask.comments?.length === 0 && (
+                  <p className="text-sm text-slate-600">No comments yet.</p>
+                )}
+                {detailTask.comments?.map((c, i) => (
+                  <div key={i} className="flex gap-3">
+                    <div className="w-7 h-7 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-300 text-xs font-bold flex-shrink-0">
+                      {(c.user?.name || "U").slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="flex-1 bg-[#1a2035] rounded-xl px-3 py-2.5">
+                      <p className="text-xs font-medium text-indigo-300 mb-1">{c.user?.name || "User"}</p>
+                      <p className="text-sm text-slate-300">{c.text}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Add comment */}
+              <form onSubmit={handleAddComment} className="flex gap-2">
+                <input
+                  placeholder="Write a comment…"
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  className="flex-1 px-3 py-2 bg-[#1a2035] border border-[#2a3550] rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/60 transition-all"
+                />
+                <Button type="submit" size="sm" loading={addingComment}>Post</Button>
+              </form>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+export default TaskPage;

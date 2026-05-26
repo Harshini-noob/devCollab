@@ -1,28 +1,16 @@
 import api from "../api/axios";
 
-export const getWorkspaces = async (token) => {
-  const response = await api.get("/workspaces", {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  return response.data;
+export const getWorkspaces = async () => {
+  const res = await api.get("/workspaces");
+  return res.data;
 };
 
-export const createWorkspace = async (
-  workspaceData,
-  token
-) => {
-  const response = await api.post(
-    "/workspaces",
-    workspaceData,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    }
-  );
+export const createWorkspace = async (data) => {
+  const res = await api.post("/workspaces", data);
+  return res.data;
+};
 
-  return response.data;
+export const deleteWorkspace = async (workspaceId) => {
+  const res = await api.delete(`/workspaces/${workspaceId}`);
+  return res.data;
 };
