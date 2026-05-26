@@ -7,6 +7,7 @@ import {
   getProjectTasks,
   updateTaskStatus,
   addComment,
+  deleteTask,
 } from "../controllers/task.controller.js";
 
 const router = express.Router();
@@ -18,5 +19,7 @@ router.get("/:projectId", protect, getProjectTasks);
 router.patch("/:taskId/status", protect, updateTaskStatus);
 
 router.post("/:taskId/comments", protect, addComment);
+
+router.delete("/:taskId", protect, deleteTask);
 
 export default router;
