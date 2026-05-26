@@ -1,6 +1,7 @@
 import { io } from "../server.js";
 import Task from "../models/task.model.js";
 import Project from "../models/project.model.js";
+import { logActivity } from "../services/activity.service.js";
 
 export const createTask = async (req, res) => {
   try {
@@ -35,6 +36,18 @@ export const createTask = async (req, res) => {
 
     io.to(projectId).emit("taskCreated", task);
     
+    await logActivity({
+      workspace: project.workspace,
+      project: project._id,
+      user: req.user._id,
+      action: "created a task",
+      entityType: "Task",
+      entityId: task._id,
+      metadata: {
+        taskTitle: task.title,
+      },
+    });
+
     res.status(201).json({
       message: "Task created successfully",
       task,
@@ -75,6 +88,8 @@ export const updateTaskStatus = async (req, res) => {
 
     const task = await Task.findById(taskId);
 
+    const project = await Project.findById(task.project);
+
     if (!task) {
       return res.status(404).json({
         message: "Task not found",
@@ -86,6 +101,18 @@ export const updateTaskStatus = async (req, res) => {
     await task.save();
 
     io.to(task.project.toString()).emit("taskUpdated", task);
+
+    await logActivity({
+      workspace: project.workspace,
+      project: task.project,
+      user: req.user._id,
+      action: `moved task to ${status}`,
+      entityType: "Task",
+      entityId: task._id,
+      metadata: {
+        status,
+      },
+    });
 
     res.status(200).json({
       message: "Task status updated",
@@ -106,6 +133,8 @@ export const addComment = async (req, res) => {
 
     const task = await Task.findById(taskId);
 
+    const project = await Project.findById(task.project);
+
     if (!task) {
       return res.status(404).json({
         message: "Task not found",
@@ -120,6 +149,15 @@ export const addComment = async (req, res) => {
     await task.save();
 
     io.to(task.project.toString()).emit("commentAdded", task);
+
+    await logActivity({
+      workspace: project.workspace,
+      project: task.project,
+      user: req.user._id,
+      action: "added a comment",
+      entityType: "Comment",
+      entityId: task._id,
+    });
 
     res.status(200).json({
       message: "Comment added",

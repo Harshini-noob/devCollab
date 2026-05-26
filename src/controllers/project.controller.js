@@ -1,5 +1,6 @@
 import Project from "../models/project.model.js";
 import Workspace from "../models/workspace.model.js";
+import { logActivity } from "../services/activity.service.js";
 
 export const createProject = async (req, res) => {
   try {
@@ -35,6 +36,18 @@ export const createProject = async (req, res) => {
           role: "Admin",
         },
       ],
+    });
+
+    await logActivity({
+      workspace: workspaceId,
+      project: project._id,
+      user: req.user._id,
+      action: "created a project",
+      entityType: "Project",
+      entityId: project._id,
+      metadata: {
+        projectName: project.name,
+      },
     });
 
     res.status(201).json({
