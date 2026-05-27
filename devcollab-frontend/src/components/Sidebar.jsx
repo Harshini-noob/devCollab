@@ -23,10 +23,10 @@ function Sidebar() {
         <img
           src="/logo.png"
           alt="DevCollab"
-          className="w-9 h-9 rounded-xl object-cover"
+          className="w-6 h-6 rounded-md object-cover"
         />
 
-        <span className="font-semibold text-white text-[15px] tracking-tight">
+        <span className="font-semibold text-white text-[18px] tracking-tight">
           DevCollab
         </span>
       </div>
