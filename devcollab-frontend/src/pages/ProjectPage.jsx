@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getProjects, createProject } from "../services/project.service";
+import { getProjects, createProject, deleteProject, } from "../services/project.service";
 import { getWorkspaceActivity } from "../services/activity.service";
 import { useToast } from "../context/ToastContext";
 import Modal from "../components/Modal";
@@ -61,6 +61,26 @@ function ProjectPage() {
       toast(err.response?.data?.message || "Failed", "error");
     }
     setSubmitting(false);
+  };
+
+  const handleDelete = async (e, projectId) => {
+    e.stopPropagation();
+
+    const confirmed = window.confirm("Delete this project?");
+    if (!confirmed) return;
+
+    try {
+      await deleteProject(projectId);
+
+      toast("Project deleted", "success");
+
+      fetchProjects();
+    } catch (err) {
+      toast(
+        err.response?.data?.message || "Failed to delete project",
+        "error"
+      );
+    }
   };
 
   const timeAgo = (date) => {
@@ -129,15 +149,84 @@ function ProjectPage() {
               <div
                 key={p._id}
                 onClick={() => navigate(`/workspace/${workspaceId}/project/${p._id}`)}
-                className="group bg-[#0d1117] border border-[#1e2535] hover:border-indigo-500/40 rounded-2xl p-5 cursor-pointer transition-all hover:shadow-lg hover:shadow-indigo-500/5 animate-fadein"
+                className="
+                  group
+                  bg-gradient-to-br
+                  from-[#0d1117]
+                  to-[#111827]
+                  border
+                  border-[#1e2535]
+                  hover:border-indigo-500/40
+                  rounded-2xl
+                  p-5
+                  cursor-pointer
+                  transition-all
+                  hover:shadow-lg
+                  hover:shadow-indigo-500/10
+                  hover:-translate-y-1
+                  duration-300
+                  animate-fadein
+                "
               >
-                <div className="w-9 h-9 rounded-lg bg-violet-600/20 border border-violet-500/30 flex items-center justify-center text-violet-300 font-bold text-xs mb-3">
-                  {p.name.slice(0, 2).toUpperCase()}
+                {/* Top */}
+                <div className="flex items-start justify-between mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-violet-600/20 border border-violet-500/30 flex items-center justify-center text-violet-300 font-bold text-xs">
+                    {p.name.slice(0, 2).toUpperCase()}
+                  </div>
+
+                  <button
+                    onClick={(e) => handleDelete(e, p._id)}
+                    className="
+                      opacity-0
+                      group-hover:opacity-100
+                      px-2.5
+                      py-1
+                      rounded-lg
+                      text-xs
+                      text-red-400
+                      hover:bg-red-500/10
+                      hover:text-red-300
+                      transition-all
+                    "
+                  >
+                    Delete
+                  </button>
                 </div>
-                <h2 className="font-semibold text-white text-[15px] mb-1 truncate">{p.name}</h2>
-                <p className="text-slate-400 text-sm line-clamp-2">{p.description || "No description"}</p>
-                <div className="mt-4 pt-3 border-t border-[#1e2535] flex items-center justify-between">
-                  <span className="text-xs text-slate-500">View tasks & wiki →</span>
+
+                {/* Name */}
+                <h2 className="font-semibold text-white text-[15px] mb-2 truncate">
+                  {p.name}
+                </h2>
+
+                {/* Description */}
+                <p className="text-slate-400 text-sm line-clamp-2 mb-4">
+                  {p.description || "No description"}
+                </p>
+
+                {/* Project ID */}
+                <div className="bg-[#111827] border border-[#1e2535] rounded-xl px-3 py-2 flex items-center justify-between gap-2 mb-4">
+                  <span className="text-[11px] text-slate-500 truncate">
+                    ID: {p._id}
+                  </span>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigator.clipboard.writeText(p._id);
+
+                      toast("Project ID copied", "success");
+                    }}
+                    className="text-xs text-indigo-300 hover:text-white transition-colors"
+                  >
+                    Copy
+                  </button>
+                </div>
+
+                {/* Footer */}
+                <div className="pt-3 border-t border-[#1e2535] flex items-center justify-between">
+                  <span className="text-xs text-slate-500">
+                    View tasks & wiki →
+                  </span>
                 </div>
               </div>
             ))}
