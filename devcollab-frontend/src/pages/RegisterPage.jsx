@@ -37,8 +37,12 @@ function RegisterPage() {
 
       <div className="w-full max-w-sm animate-fadein relative">
         <div className="text-center mb-8">
-          <div className="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center text-white font-bold text-lg mx-auto mb-4">
-            DC
+          <div className="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center overflow-hidden shadow-lg shadow-indigo-500/20">
+            <img
+              src="/logo.png"
+              alt="DevCollab"
+              className="w-7 h-7 object-contain translate-x-[1px]"
+            />
           </div>
           <h1 className="text-2xl font-bold text-white tracking-tight">Create your account</h1>
           <p className="text-slate-400 text-sm mt-1">Start collaborating today</p>

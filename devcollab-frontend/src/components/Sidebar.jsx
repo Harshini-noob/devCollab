@@ -20,18 +20,18 @@ function Sidebar() {
     <div className="w-[220px] min-w-[220px] bg-[#0d1117] border-r border-[#1e2535] flex flex-col h-screen sticky top-0">
       {/* Logo */}
       <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center">
-          <img
-            src="/logo.png"
-            alt="DevCollab"
-            className="w-6 h-6 rounded-md object-cover"
-          />
-        </div>
-
-        <span className="font-semibold text-white text-[15px] tracking-tight">
-          DevCollab
-        </span>
+      <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center overflow-hidden">
+        <img
+          src="/logo.png"
+          alt="DevCollab"
+          className="w-5 h-5 object-contain translate-x-[1px]"
+        />
       </div>
+
+      <span className="font-semibold text-white text-[17px] tracking-tight">
+        DevCollab
+      </span>
+    </div>
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1">
