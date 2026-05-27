@@ -7,39 +7,56 @@ import {
   addComment,
   deleteTask,
 } from "../services/task.service";
-import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import Modal from "../components/Modal";
 import Button from "../components/Button";
 import { StatusBadge, PriorityBadge } from "../components/Badge";
-import EmptyState from "../components/EmptyState";
 
+// ── Exact values from your backend task.model.js ──────────────────
 const COLUMNS = [
-  { id: "todo",        label: "To Do",       color: "text-slate-400",   dot: "bg-slate-500" },
-  { id: "in-progress", label: "In Progress", color: "text-blue-400",    dot: "bg-blue-500" },
-  { id: "done",        label: "Done",        color: "text-emerald-400", dot: "bg-emerald-500" },
-  { id: "blocked",     label: "Blocked",     color: "text-red-400",     dot: "bg-red-500" },
+  { id: "To Do",      label: "To Do",      color: "text-slate-400",   dot: "bg-slate-500" },
+  { id: "In Progress",label: "In Progress",color: "text-blue-400",    dot: "bg-blue-500"  },
+  { id: "In Review",  label: "In Review",  color: "text-amber-400",   dot: "bg-amber-500" },
+  { id: "Done",       label: "Done",       color: "text-emerald-400", dot: "bg-emerald-500"},
 ];
 
-const PRIORITIES = ["low", "medium", "high"];
+// P0 = most urgent, P2 = lowest
+const PRIORITIES = [
+  { value: "P0", label: "P0 — Critical" },
+  { value: "P1", label: "P1 — Medium"   },
+  { value: "P2", label: "P2 — Low"      },
+];
+
+const PRIORITY_STYLES = {
+  P0: "bg-red-500/15 text-red-300 border-red-500/30",
+  P1: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+  P2: "bg-slate-700/60 text-slate-400 border-slate-600/40",
+};
+
+const STATUS_STYLES = {
+  "To Do":       "bg-slate-700/60 text-slate-300 border-slate-600/40",
+  "In Progress": "bg-blue-500/15 text-blue-300 border-blue-500/30",
+  "In Review":   "bg-amber-500/15 text-amber-300 border-amber-500/30",
+  "Done":        "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+};
 
 function TaskPage() {
   const { workspaceId, projectId } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
   const toast = useToast();
 
-  const [tasks, setTasks]               = useState([]);
-  const [loading, setLoading]           = useState(true);
-  const [createModal, setCreateModal]   = useState(false);
-  const [detailTask, setDetailTask]     = useState(null);
-  const [submitting, setSubmitting]     = useState(false);
-  const [comment, setComment]           = useState("");
-  const [addingComment, setAddingComment] = useState(false);
+  const [tasks,        setTasks]        = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [createModal,  setCreateModal]  = useState(false);
+  const [detailTask,   setDetailTask]   = useState(null);
+  const [submitting,   setSubmitting]   = useState(false);
+  const [comment,      setComment]      = useState("");
+  const [addingComment,setAddingComment]= useState(false);
 
   const [form, setForm] = useState({
-    title: "", description: "", priority: "medium",
-    dueDate: "", labels: "", assignee: "",
+    title: "", description: "", priority: "P1",
+    dueDate: "", labels: "",
+    // assignee is intentionally removed — needs real ObjectId
   });
 
   const fetchTasks = async () => {
@@ -55,7 +72,7 @@ function TaskPage() {
 
   useEffect(() => { fetchTasks(); }, [projectId]);
 
-  // Sync detailTask when tasks update
+  // Keep detailTask in sync when tasks list updates
   useEffect(() => {
     if (detailTask) {
       const updated = tasks.find((t) => t._id === detailTask._id);
@@ -69,17 +86,23 @@ function TaskPage() {
     setSubmitting(true);
     try {
       const body = {
-        ...form,
+        title:       form.title,
+        description: form.description,
+        priority:    form.priority,
+        dueDate:     form.dueDate || undefined,
+        labels:      form.labels
+          ? form.labels.split(",").map((l) => l.trim()).filter(Boolean)
+          : [],
         projectId,
-        labels: form.labels ? form.labels.split(",").map((l) => l.trim()).filter(Boolean) : [],
+        // assignee intentionally omitted — needs a MongoDB ObjectId
       };
       await createTask(body);
       toast("Task created!", "success");
       setCreateModal(false);
-      setForm({ title: "", description: "", priority: "medium", dueDate: "", labels: "", assignee: "" });
+      setForm({ title: "", description: "", priority: "P1", dueDate: "", labels: "" });
       fetchTasks();
     } catch (err) {
-      toast(err.response?.data?.message || "Failed", "error");
+      toast(err.response?.data?.message || "Failed to create task", "error");
     }
     setSubmitting(false);
   };
@@ -87,7 +110,9 @@ function TaskPage() {
   const handleStatusChange = async (taskId, status) => {
     try {
       await updateTaskStatus(taskId, status);
-      setTasks((prev) => prev.map((t) => t._id === taskId ? { ...t, status } : t));
+      setTasks((prev) =>
+        prev.map((t) => t._id === taskId ? { ...t, status } : t)
+      );
     } catch (err) {
       toast(err.response?.data?.message || "Failed to update status", "error");
     }
@@ -111,17 +136,21 @@ function TaskPage() {
     setAddingComment(true);
     try {
       const data = await addComment(detailTask._id, comment);
-      setTasks((prev) => prev.map((t) => t._id === detailTask._id ? data.task : t));
-      setDetailTask(data.task);
+      // backend returns the full updated task
+      const updatedTask = data.task;
+      setTasks((prev) =>
+        prev.map((t) => t._id === updatedTask._id ? updatedTask : t)
+      );
+      setDetailTask(updatedTask);
       setComment("");
-      toast("Comment added", "success");
     } catch {
       toast("Failed to add comment", "error");
     }
     setAddingComment(false);
   };
 
-  const byStatus = (status) => tasks.filter((t) => (t.status || "todo") === status);
+  const byStatus = (status) =>
+    tasks.filter((t) => (t.status || "To Do") === status);
 
   if (loading) {
     return (
@@ -141,14 +170,10 @@ function TaskPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <button
-            onClick={() => navigate(`/workspace/${workspaceId}`)}
-            className="text-slate-500 hover:text-slate-300 text-sm mb-2 flex items-center gap-1 transition-colors"
-          >
-            ← Back
-          </button>
           <h1 className="text-2xl font-bold text-white tracking-tight">Tasks</h1>
-          <p className="text-slate-400 text-sm mt-1">{tasks.length} task{tasks.length !== 1 ? "s" : ""}</p>
+          <p className="text-slate-400 text-sm mt-1">
+            {tasks.length} task{tasks.length !== 1 ? "s" : ""}
+          </p>
         </div>
         <Button onClick={() => setCreateModal(true)}>+ New Task</Button>
       </div>
@@ -178,9 +203,13 @@ function TaskPage() {
                     onClick={() => setDetailTask(task)}
                     className="bg-[#0d1117] border border-[#1e2535] hover:border-indigo-500/30 rounded-xl p-3.5 cursor-pointer transition-all hover:shadow-md animate-fadein"
                   >
-                    <p className="text-sm font-medium text-white mb-2 leading-snug">{task.title}</p>
+                    <p className="text-sm font-medium text-white mb-2 leading-snug">
+                      {task.title}
+                    </p>
                     <div className="flex flex-wrap gap-1.5">
-                      <PriorityBadge priority={task.priority} />
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${PRIORITY_STYLES[task.priority] || PRIORITY_STYLES.P1}`}>
+                        {task.priority || "P1"}
+                      </span>
                       {task.dueDate && (
                         <span className="text-xs text-slate-500 font-mono">
                           {new Date(task.dueDate).toLocaleDateString()}
@@ -190,7 +219,10 @@ function TaskPage() {
                     {task.labels?.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2">
                         {task.labels.map((l, i) => (
-                          <span key={i} className="text-xs bg-[#1a2035] text-slate-400 px-2 py-0.5 rounded-md border border-[#2a3550]">
+                          <span
+                            key={i}
+                            className="text-xs bg-[#1a2035] text-slate-400 px-2 py-0.5 rounded-md border border-[#2a3550]"
+                          >
                             {l}
                           </span>
                         ))}
@@ -198,7 +230,7 @@ function TaskPage() {
                     )}
                     {task.comments?.length > 0 && (
                       <p className="text-xs text-slate-600 mt-2">
-                        {task.comments.length} comment{task.comments.length !== 1 ? "s" : ""}
+                        💬 {task.comments.length}
                       </p>
                     )}
                   </div>
@@ -215,12 +247,14 @@ function TaskPage() {
         })}
       </div>
 
-      {/* Create Task Modal */}
+      {/* ── Create Task Modal ─────────────────────────── */}
       {createModal && (
         <Modal title="New Task" onClose={() => setCreateModal(false)} size="lg">
           <form onSubmit={handleCreate} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Title *</label>
+              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+                Title *
+              </label>
               <input
                 autoFocus
                 placeholder="Task title"
@@ -230,8 +264,11 @@ function TaskPage() {
                 className="w-full px-3 py-2.5 bg-[#1a2035] border border-[#2a3550] rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/60 transition-all"
               />
             </div>
+
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Description</label>
+              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+                Description
+              </label>
               <textarea
                 rows={3}
                 placeholder="Task details…"
@@ -240,19 +277,26 @@ function TaskPage() {
                 className="w-full px-3 py-2.5 bg-[#1a2035] border border-[#2a3550] rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/60 transition-all resize-none"
               />
             </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Priority</label>
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+                  Priority
+                </label>
                 <select
                   value={form.priority}
                   onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
                   className="w-full px-3 py-2.5 bg-[#1a2035] border border-[#2a3550] rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500/60 transition-all appearance-none"
                 >
-                  {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+                  {PRIORITIES.map((p) => (
+                    <option key={p.value} value={p.value}>{p.label}</option>
+                  ))}
                 </select>
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Due Date</label>
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+                  Due Date
+                </label>
                 <input
                   type="date"
                   value={form.dueDate}
@@ -261,17 +305,11 @@ function TaskPage() {
                 />
               </div>
             </div>
+
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Assignee</label>
-              <input
-                placeholder="Email or username"
-                value={form.assignee}
-                onChange={(e) => setForm((f) => ({ ...f, assignee: e.target.value }))}
-                className="w-full px-3 py-2.5 bg-[#1a2035] border border-[#2a3550] rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/60 transition-all"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Labels (comma separated)</label>
+              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+                Labels (comma separated)
+              </label>
               <input
                 placeholder="bug, frontend, urgent"
                 value={form.labels}
@@ -279,22 +317,29 @@ function TaskPage() {
                 className="w-full px-3 py-2.5 bg-[#1a2035] border border-[#2a3550] rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/60 transition-all"
               />
             </div>
+
             <div className="flex gap-3 justify-end pt-1">
-              <Button variant="ghost" type="button" onClick={() => setCreateModal(false)}>Cancel</Button>
+              <Button variant="ghost" type="button" onClick={() => setCreateModal(false)}>
+                Cancel
+              </Button>
               <Button type="submit" loading={submitting}>Create Task</Button>
             </div>
           </form>
         </Modal>
       )}
 
-      {/* Task Detail Modal */}
+      {/* ── Task Detail Modal ─────────────────────────── */}
       {detailTask && (
         <Modal title={detailTask.title} onClose={() => setDetailTask(null)} size="lg">
           <div className="flex flex-col gap-5">
             {/* Badges */}
             <div className="flex flex-wrap gap-2">
-              <StatusBadge status={detailTask.status || "todo"} />
-              <PriorityBadge priority={detailTask.priority} />
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${STATUS_STYLES[detailTask.status] || STATUS_STYLES["To Do"]}`}>
+                {detailTask.status || "To Do"}
+              </span>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${PRIORITY_STYLES[detailTask.priority] || PRIORITY_STYLES.P1}`}>
+                {detailTask.priority || "P1"}
+              </span>
               {detailTask.dueDate && (
                 <span className="text-xs text-slate-400 border border-[#2a3550] px-2 py-0.5 rounded-md font-mono">
                   Due {new Date(detailTask.dueDate).toLocaleDateString()}
@@ -304,18 +349,8 @@ function TaskPage() {
 
             {/* Description */}
             {detailTask.description && (
-              <p className="text-sm text-slate-400 leading-relaxed">{detailTask.description}</p>
-            )}
-
-            {/* Assignee */}
-            {detailTask.assignee && (
-              <p className="text-sm text-slate-500">
-                Assigned to:{" "}
-                <span className="text-slate-300">
-                  {typeof detailTask.assignee === "object"
-                    ? detailTask.assignee.name
-                    : detailTask.assignee}
-                </span>
+              <p className="text-sm text-slate-400 leading-relaxed">
+                {detailTask.description}
               </p>
             )}
 
@@ -330,15 +365,37 @@ function TaskPage() {
               </div>
             )}
 
+            {/* Assignee */}
+            {detailTask.assignee && (
+              <p className="text-sm text-slate-500">
+                Assigned to:{" "}
+                <span className="text-slate-300">
+                  {detailTask.assignee?.name || detailTask.assignee}
+                </span>
+              </p>
+            )}
+
+            {/* Created by */}
+            {detailTask.createdBy && (
+              <p className="text-sm text-slate-500">
+                Created by:{" "}
+                <span className="text-slate-300">{detailTask.createdBy?.name}</span>
+              </p>
+            )}
+
             {/* Change Status */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Change Status</label>
+              <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+                Change Status
+              </label>
               <select
-                value={detailTask.status || "todo"}
+                value={detailTask.status || "To Do"}
                 onChange={(e) => handleStatusChange(detailTask._id, e.target.value)}
                 className="w-full px-3 py-2.5 bg-[#1a2035] border border-[#2a3550] rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500/60 transition-all appearance-none"
               >
-                {COLUMNS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                {COLUMNS.map((c) => (
+                  <option key={c.id} value={c.id}>{c.label}</option>
+                ))}
               </select>
             </div>
 
@@ -358,7 +415,7 @@ function TaskPage() {
                 Comments ({detailTask.comments?.length || 0})
               </h4>
 
-              <div className="space-y-3 mb-4 max-h-48 overflow-y-auto">
+              <div className="space-y-3 mb-4 max-h-48 overflow-y-auto pr-1">
                 {detailTask.comments?.length === 0 && (
                   <p className="text-sm text-slate-600">No comments yet.</p>
                 )}
@@ -368,7 +425,9 @@ function TaskPage() {
                       {(c.user?.name || "U").slice(0, 2).toUpperCase()}
                     </div>
                     <div className="flex-1 bg-[#1a2035] rounded-xl px-3 py-2.5">
-                      <p className="text-xs font-medium text-indigo-300 mb-1">{c.user?.name || "User"}</p>
+                      <p className="text-xs font-medium text-indigo-300 mb-1">
+                        {c.user?.name || "User"}
+                      </p>
                       <p className="text-sm text-slate-300">{c.text}</p>
                     </div>
                   </div>
@@ -383,7 +442,9 @@ function TaskPage() {
                   onChange={(e) => setComment(e.target.value)}
                   className="flex-1 px-3 py-2 bg-[#1a2035] border border-[#2a3550] rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/60 transition-all"
                 />
-                <Button type="submit" size="sm" loading={addingComment}>Post</Button>
+                <Button type="submit" size="sm" loading={addingComment}>
+                  Post
+                </Button>
               </form>
             </div>
           </div>
