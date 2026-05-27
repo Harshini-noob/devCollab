@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "http://localhost:5000/api",
+  baseURL: "https://devcollab-em1r.onrender.com/api",
 });
 
 // Automatically attach token from localStorage on every request
